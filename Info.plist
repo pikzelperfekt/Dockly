@@ -2,44 +2,43 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key>
-    <string>Dockly</string>
-    <key>CFBundleDisplayName</key>
-    <string>Dockly</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.josi.dockly</string>
-    <key>CFBundleVersion</key>
-    <string>1.0</string>
-    <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
-    <key>CFBundleExecutable</key>
-    <string>Dockly</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>13.0</string>
-    <key>LSUIElement</key>
-    <true/>
-    <key>NSHumanReadableCopyright</key>
-    <string>Personal project.</string>
-    <key>NSCalendarsUsageDescription</key>
-    <string>Dockly shows your upcoming events in the notch.</string>
-    <key>NSBluetoothAlwaysUsageDescription</key>
-    <string>Dockly shows a notification when Bluetooth devices like AirPods connect.</string>
-    <key>NSAppleEventsUsageDescription</key>
-    <string>Dockly reads now-playing info from Spotify, Music, and your browser, and runs your Shortcuts.</string>
-    <key>NSAudioCaptureUsageDescription</key>
-    <string>Dockly reads the system audio levels so the notch can react to your music (DJ mode).</string>
-    <!-- Sparkle auto-updates. Replace YOUR_GITHUB_USER with your GitHub username. -->
-    <key>SUFeedURL</key>
-    <string>https://github.com/pikzelperfekt/Dockly/releases/latest/download/appcast.xml</string>
-    <key>SUPublicEDKey</key>
-    <string>DgZ0sFJv8emnaraQxaEOj68JYp7Wmt8Og4Kg3YJycag=</string>
-    <key>SUEnableAutomaticChecks</key>
-    <true/>
-    <key>SUScheduledCheckInterval</key>
-    <integer>86400</integer>
+	<key>CFBundleDisplayName</key>
+	<string>Dockly</string>
+	<key>CFBundleExecutable</key>
+	<string>Dockly</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.josi.dockly</string>
+	<key>CFBundleName</key>
+	<string>Dockly</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1.0</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Dockly reads now-playing info from Spotify, Music, and your browser, and runs your Shortcuts.</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Dockly reads the system audio levels so the notch can react to your music (DJ mode).</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Dockly shows a notification when Bluetooth devices like AirPods connect.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Dockly shows your upcoming events in the notch.</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Personal project.</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/pikzelperfekt/Dockly/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>DgZ0sFJv8emnaraQxaEOj68JYp7Wmt8Og4Kg3YJycag=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 </dict>
 </plist>
