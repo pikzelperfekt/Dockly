@@ -1,0 +1,18 @@
+# Build output
+.build/
+dist/
+*.dmg
+
+# Xcode / SwiftPM
+.swiftpm/
+Package.resolved
+*.xcuserstate
+*.xcworkspace/xcuserdata
+DerivedData/
+
+# macOS
+.DS_Store
+
+# Sparkle signing — NEVER commit private keys
+*.private
+eddsa_priv*
