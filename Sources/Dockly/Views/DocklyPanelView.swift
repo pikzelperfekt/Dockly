@@ -398,7 +398,9 @@ struct DocklyPanelView: View {
         VStack(spacing: 0) {
             tabContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()                       // never overflow into the tab bar
             tabBar
+                .frame(height: controller.expandedTabBarHeight) // protected row
         }
         .environment(\.notchGeometry, NotchGeometry(
             notchH: notchH,

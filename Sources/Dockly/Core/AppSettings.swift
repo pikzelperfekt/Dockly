@@ -66,17 +66,16 @@ enum DocklyTab: String, CaseIterable, Codable, Identifiable {
         }
     }
 
-    /// Vertical space allocated below the notch line (does NOT include the
-    /// notch hardware strip). Music is small because controls live in the
-    /// wings; content-heavy tabs get more room.
+    /// Usable body height below the notch (excludes the notch strip AND the
+    /// reserved tab-bar row — the controller adds those).
     var contentHeight: CGFloat {
         switch self {
-        case .live:      return 128
-        case .tray:      return 110
-        case .tasks:     return 160
-        case .timer:     return 140
-        case .notes:     return 150
-        case .shortcuts: return 160
+        case .live:      return 96
+        case .tray:      return 104
+        case .tasks:     return 150
+        case .timer:     return 124
+        case .notes:     return 140
+        case .shortcuts: return 150
         }
     }
 }

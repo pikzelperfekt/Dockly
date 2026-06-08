@@ -86,7 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let win = NSWindow(contentViewController: ctrl)
             win.title = "Dockly Settings"
             win.styleMask = [.titled, .closable]
-            win.setContentSize(NSSize(width: 520, height: 620))
+            win.setContentSize(NSSize(width: 500, height: 560))
             win.center()
             settingsWindow = win
         }

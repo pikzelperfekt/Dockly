@@ -13,8 +13,23 @@ struct SettingsView: View {
     }
 
     var body: some View {
+        TabView {
+            generalTab.tabItem { Label("General", systemImage: "gearshape") }
+            appearanceTab.tabItem { Label("Appearance", systemImage: "paintbrush") }
+            musicTab.tabItem { Label("Music", systemImage: "music.note") }
+            tabsTab.tabItem { Label("Tabs", systemImage: "square.grid.2x2") }
+            integrationsTab.tabItem { Label("Integrations", systemImage: "link") }
+            sizeTab.tabItem { Label("Size", systemImage: "ruler") }
+            aboutTab.tabItem { Label("About", systemImage: "info.circle") }
+        }
+        .frame(width: 500, height: 560)
+    }
+
+    // MARK: - General
+
+    private var generalTab: some View {
         Form {
-            Section("General") {
+            Section {
                 Toggle("Launch Dockly at login", isOn: Binding(
                     get: { launchAtLogin },
                     set: { on in
@@ -23,240 +38,221 @@ struct SettingsView: View {
                     }
                 ))
                 .disabled(!LaunchAtLogin.isAvailable)
-                if !LaunchAtLogin.isAvailable {
-                    Text("Available once Dockly is built as an .app bundle (run build-app.sh) and launched from /Applications.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
                 Toggle("Global hotkey to toggle (⌥⌘D)", isOn: $settings.hotkeyEnabled)
                 Toggle("Sound effects", isOn: $settings.soundEffects)
-            }
-
-            Section("Life Dashboard") {
-                HStack {
-                    Text("Backend URL")
-                    Spacer()
-                    TextField("http://localhost:3000", text: $settings.lifeDashboardURL)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 220)
-                }
-                Text("Run `npm start` in your life-dashboard folder to enable calendar and task sync.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("Behavior") {
-                Picker("Expand on", selection: $settings.expandTrigger) {
-                    ForEach(AppSettings.ExpandTrigger.allCases, id: \.self) { t in
-                        Text(t.label).tag(t)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text("Stay open for")
-                        Spacer()
-                        Stepper(
-                            value: $settings.autoCollapseDelay,
-                            in: 0.1...15.0,
-                            step: 0.1
-                        ) {
-                            Text("\(settings.autoCollapseDelay, specifier: "%.1f") s")
-                                .monospacedDigit()
-                                .frame(width: 44, alignment: .trailing)
-                        }
-                    }
-                    Slider(value: $settings.autoCollapseDelay, in: 0.1...15.0, step: 0.1)
-                    HStack {
-                        Text("0.1 s").font(.caption).foregroundStyle(.secondary)
-                        Spacer()
-                        Text("15 s").font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-            }
-
-            Section("Edge Decoration") {
-                Toggle("Adapt color to album art", isOn: $settings.adaptiveAccent)
-                Text("The pill glows in the colors of whatever's playing.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Toggle(isOn: $settings.audioReactive) {
-                    HStack(spacing: 6) {
-                        Text("React to music (DJ mode)")
-                        BetaBadge()
-                    }
-                }
-                .disabled(!djModeSupported)
-                if djModeSupported {
-                    Text("Bars + border react to the live audio. macOS shows a recording indicator while it listens (required for any system-audio capture); it only runs while music is playing and disappears when paused.")
-                        .font(.caption).foregroundStyle(.secondary)
-                } else {
-                    Text("DJ mode needs macOS 14.4 or later (it uses a Core Audio tap to read the beat). Everything else works on your Mac.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                if settings.audioReactive && djModeSupported {
-                    HStack {
-                        Text("Sensitivity")
-                        Spacer()
-                        Slider(value: $settings.djSensitivity, in: 0.5...3.0, step: 0.1)
-                            .frame(width: 150)
-                        Text("\(settings.djSensitivity, specifier: "%.1f")×")
-                            .monospacedDigit().frame(width: 36, alignment: .trailing)
-                    }
-                    Toggle("Speed up border with volume", isOn: $settings.djReactSpeed)
-                    Toggle("Pulse border brightness", isOn: $settings.djReactPulse)
-                    Toggle("Bounce the pill on the beat", isOn: $settings.djBeatBounce)
-                }
-                Picker("Edge style", selection: $settings.pillEdgeStyle) {
-                    ForEach(PillEdgeStyle.allCases) { style in
-                        Text(style.label).tag(style)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                if settings.pillEdgeStyle != .off {
-                    ColorPicker("Edge color", selection: edgeColor1Binding,
-                                supportsOpacity: true)
-                    if settings.pillEdgeStyle == .gradient {
-                        ColorPicker("Gradient end", selection: edgeColor2Binding,
-                                    supportsOpacity: true)
-
-                        Picker("Direction", selection: $settings.pillEdgeDirection) {
-                            ForEach(PillEdgeDirection.allCases) { d in
-                                Text(d.label).tag(d)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-
-                        Picker("Animation", selection: $settings.pillEdgeAnimation) {
-                            ForEach(PillEdgeAnimation.allCases) { a in
-                                Text(a.label).tag(a)
-                            }
-                        }
-                        .pickerStyle(.menu)
-
-                        if settings.pillEdgeAnimation != .none {
-                            HStack {
-                                Text("Speed")
-                                Spacer()
-                                Slider(value: $settings.pillEdgeAnimSpeed, in: 0.25...3.0, step: 0.25)
-                                    .frame(width: 160)
-                                Text("\(settings.pillEdgeAnimSpeed, specifier: "%.2f")×")
-                                    .monospacedDigit()
-                                    .frame(width: 44, alignment: .trailing)
-                            }
-                        }
-                    }
-                    HStack {
-                        Text("Edge width")
-                        Spacer()
-                        Slider(value: $settings.pillEdgeWidth, in: 0.5...5.0, step: 0.5)
-                            .frame(width: 160)
-                        Text("\(settings.pillEdgeWidth, specifier: "%.1f") pt")
-                            .monospacedDigit()
-                            .frame(width: 44, alignment: .trailing)
-                    }
+            } footer: {
+                if !LaunchAtLogin.isAvailable {
+                    Text("Launch at login works once Dockly is in /Applications.")
                 }
             }
 
             Section {
-                Toggle("Glow inward from the edge", isOn: $settings.pillInnerGlow)
-                if settings.pillInnerGlow {
-                    Text("Matches the border colors. Shows only when expanded or peeking.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    HStack {
-                        Text("Intensity")
-                        Spacer()
-                        Slider(value: $settings.pillInnerGlowIntensity, in: 0.1...1.0, step: 0.05)
-                            .frame(width: 160)
-                        Text("\(Int(settings.pillInnerGlowIntensity * 100))%")
-                            .monospacedDigit()
-                            .frame(width: 44, alignment: .trailing)
+                Picker("Open the panel on", selection: $settings.expandTrigger) {
+                    ForEach(AppSettings.ExpandTrigger.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                slider("Stay open for", $settings.autoCollapseDelay,
+                       0.1...15.0, step: 0.1, fmt: "%.1f", unit: "s")
+            } header: {
+                Text("Opening")
+            } footer: {
+                Text("“Hover” opens when your cursor approaches the notch; “Click” waits for a click. After your cursor leaves, it stays open for the time above.")
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    // MARK: - Appearance
+
+    private var appearanceTab: some View {
+        Form {
+            Section {
+                Toggle("Adapt border to album art", isOn: $settings.adaptiveAccent)
+            } header: {
+                Text("Album color")
+            } footer: {
+                Text("The border glows in the colors of whatever's playing, overriding the colors below while music is on.")
+            }
+
+            Section("Border") {
+                Picker("Style", selection: $settings.pillEdgeStyle) {
+                    ForEach(PillEdgeStyle.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+
+                if settings.pillEdgeStyle != .off {
+                    ColorPicker("Color", selection: edgeColor1Binding, supportsOpacity: true)
+                    if settings.pillEdgeStyle == .gradient {
+                        ColorPicker("Gradient end", selection: edgeColor2Binding, supportsOpacity: true)
+                        Picker("Direction", selection: $settings.pillEdgeDirection) {
+                            ForEach(PillEdgeDirection.allCases) { Text($0.label).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                        Picker("Animation", selection: $settings.pillEdgeAnimation) {
+                            ForEach(PillEdgeAnimation.allCases) { Text($0.label).tag($0) }
+                        }
+                        if settings.pillEdgeAnimation != .none {
+                            slider("Animation speed", $settings.pillEdgeAnimSpeed,
+                                   0.25...3.0, step: 0.25, fmt: "%.2f", unit: "×")
+                        }
                     }
-                    HStack {
-                        Text("Distance")
-                        Spacer()
-                        Slider(value: $settings.pillInnerGlowDistance, in: 2...24, step: 1)
-                            .frame(width: 160)
-                        Text("\(Int(settings.pillInnerGlowDistance)) pt")
-                            .monospacedDigit()
-                            .frame(width: 44, alignment: .trailing)
+                    slider("Thickness", $settings.pillEdgeWidth,
+                           0.5...5.0, step: 0.5, fmt: "%.1f", unit: "pt")
+                }
+            }
+
+            Section {
+                Toggle("Inner glow", isOn: $settings.pillInnerGlow)
+                if settings.pillInnerGlow {
+                    slider("Intensity", $settings.pillInnerGlowIntensity,
+                           0.1...1.0, step: 0.05, fmt: "%.0f", unit: "%", scale: 100)
+                    slider("Distance", $settings.pillInnerGlowDistance,
+                           2...24, step: 1, fmt: "%.0f", unit: "pt")
+                }
+            } header: {
+                HStack(spacing: 6) { Text("Inner Glow"); BetaBadge() }
+            } footer: {
+                Text("A soft glow just inside the border, matching its colors. Shows only when expanded or peeking.")
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    // MARK: - Music
+
+    private var musicTab: some View {
+        Form {
+            Section {
+                Toggle(isOn: $settings.audioReactive) {
+                    HStack(spacing: 6) { Text("React to music (DJ mode)"); BetaBadge() }
+                }
+                .disabled(!djModeSupported)
+
+                if settings.audioReactive && djModeSupported {
+                    slider("Sensitivity", $settings.djSensitivity,
+                           0.5...3.0, step: 0.1, fmt: "%.1f", unit: "×")
+                    Toggle("Speed up border with the music", isOn: $settings.djReactSpeed)
+                    Toggle("Pulse border brightness", isOn: $settings.djReactPulse)
+                    Toggle("Bounce the pill on the beat", isOn: $settings.djBeatBounce)
+                }
+            } header: {
+                Text("DJ Mode")
+            } footer: {
+                if djModeSupported {
+                    Text("The equalizer bars and border react to the live beat. macOS shows a recording indicator while it listens (required to read system audio) — only while music plays.")
+                } else {
+                    Text("DJ mode needs macOS 14.4 or later. Everything else works on your Mac.")
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    // MARK: - Tabs
+
+    private var tabsTab: some View {
+        Form {
+            Section {
+                ForEach(DocklyTab.allCases) { tab in
+                    Toggle(isOn: tabToggle(tab)) {
+                        Label(tab.title, systemImage: tab.icon)
                     }
                 }
             } header: {
-                HStack(spacing: 6) {
-                    Text("Inner Glow")
-                    BetaBadge()
-                }
+                Text("Panels")
             } footer: {
-                Text("Experimental — may have rendering quirks during resize or on some displays.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text("Choose which panels appear in the tab bar when Dockly is open.")
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    // MARK: - Integrations
+
+    private var integrationsTab: some View {
+        Form {
+            Section {
+                TextField("http://localhost:3000", text: $settings.lifeDashboardURL)
+                    .textFieldStyle(.roundedBorder)
+            } header: {
+                Text("Life Dashboard")
+            } footer: {
+                Text("Run your life-dashboard backend to sync Tasks and events. Default: http://localhost:3000")
             }
 
             Section("Calendars") {
                 CalendarPicker()
             }
+        }
+        .formStyle(.grouped)
+    }
 
-            Section("Tabs") {
-                Text("Choose which panels appear in the tab bar.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                ForEach(DocklyTab.allCases) { tab in
-                    Toggle(isOn: tabToggle(tab)) {
-                        HStack {
-                            Image(systemName: tab.icon).frame(width: 18)
-                            Text(tab.title)
-                        }
-                    }
-                }
+    // MARK: - Size
+
+    private var sizeTab: some View {
+        Form {
+            Section("Closed pill") {
+                sizeRow("Width", $settings.compactWingWidth, 24...90, 2)
+                sizeRow("Extra height", $settings.compactExtraHeight, 0...40, 1)
             }
-
-            Section("Size & Geometry") {
-                sizeRow(title: "Compact width",
-                        value: $settings.compactWingWidth,
-                        range: 24...90, step: 2, unit: "pt")
-                sizeRow(title: "Compact extra height",
-                        value: $settings.compactExtraHeight,
-                        range: 0...40, step: 1, unit: "pt")
-                sizeRow(title: "Expanded width",
-                        value: $settings.expandedWidth,
-                        range: 340...620, step: 10, unit: "pt")
-                sizeRow(title: "Expanded extra height",
-                        value: $settings.expandedExtraHeight,
-                        range: -30...120, step: 5, unit: "pt")
-                sizeRow(title: "Notch width nudge",
-                        value: $settings.notchWidthOffset,
-                        range: -60...60, step: 2, unit: "pt")
-                sizeRow(title: "Notch height nudge",
-                        value: $settings.notchHeightOffset,
-                        range: -16...40, step: 1, unit: "pt")
-                Text("Compact width/height control the closed pill. Expanded controls the open panel. Use the nudges to match Dockly's notch to your physical notch.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            Section("Open panel") {
+                sizeRow("Width", $settings.expandedWidth, 340...620, 10)
+                sizeRow("Extra height", $settings.expandedExtraHeight, -30...120, 5)
             }
-
-            Section("Notch Debug") {
-                Toggle("Show notch outline on the pill", isOn: $settings.showNotchDebugOverlay)
-                Text("Draws a red box where Dockly thinks the notch is, with its measured size and a green center line. Use it to align the width/height nudges.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            Section {
+                sizeRow("Width nudge", $settings.notchWidthOffset, -60...60, 2)
+                sizeRow("Height nudge", $settings.notchHeightOffset, -16...40, 1)
+                Toggle("Show notch outline", isOn: $settings.showNotchDebugOverlay)
                 NotchDebugView()
+            } header: {
+                Text("Notch alignment")
+            } footer: {
+                Text("Use the nudges (and the outline overlay) to line Dockly's pill up exactly with your Mac's physical notch.")
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520, height: 680)
     }
 
-    private func sizeRow(title: String, value: Binding<Double>,
-                         range: ClosedRange<Double>, step: Double, unit: String) -> some View {
+    // MARK: - About
+
+    private var aboutTab: some View {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+        return Form {
+            Section {
+                LabeledContent("Version", value: version)
+                Button("Check for Updates…") { Updater.shared.checkForUpdates() }
+                Link("View on GitHub", destination: URL(string: "https://github.com/pikzelperfekt/Dockly")!)
+            } header: {
+                Text("Dockly")
+            } footer: {
+                Text("A Dynamic-Island-style notch hub for macOS. Updates install automatically.")
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    // MARK: - Reusable slider row
+
+    private func slider(_ title: String, _ value: Binding<Double>,
+                        _ range: ClosedRange<Double>, step: Double,
+                        fmt: String, unit: String, scale: Double = 1) -> some View {
         HStack {
             Text(title)
-            Spacer()
-            Slider(value: value, in: range, step: step).frame(width: 180)
-            Text("\(value.wrappedValue, specifier: "%.0f") \(unit)")
-                .monospacedDigit()
-                .frame(width: 48, alignment: .trailing)
+            Slider(value: value, in: range, step: step)
+            Text("\(value.wrappedValue * scale, specifier: fmt)\(unit)")
+                .monospacedDigit().foregroundStyle(.secondary)
+                .frame(width: 46, alignment: .trailing)
+        }
+    }
+
+    private func sizeRow(_ title: String, _ value: Binding<Double>,
+                         _ range: ClosedRange<Double>, _ step: Double) -> some View {
+        HStack {
+            Text(title)
+            Slider(value: value, in: range, step: step)
+            Text("\(value.wrappedValue, specifier: "%.0f") pt")
+                .monospacedDigit().foregroundStyle(.secondary)
+                .frame(width: 52, alignment: .trailing)
         }
     }
 
@@ -271,13 +267,6 @@ struct SettingsView: View {
         Binding(
             get: { Color(nsColor: NSColor(hex: settings.pillEdgeColor2Hex) ?? .systemPurple) },
             set: { settings.pillEdgeColor2Hex = NSColor($0).hexString }
-        )
-    }
-
-    private var innerGlowColorBinding: Binding<Color> {
-        Binding(
-            get: { Color(nsColor: NSColor(hex: settings.pillInnerGlowColorHex) ?? .systemBlue) },
-            set: { settings.pillInnerGlowColorHex = NSColor($0).hexString }
         )
     }
 

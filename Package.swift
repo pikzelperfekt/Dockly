@@ -13,7 +13,13 @@ let package = Package(
             dependencies: [
                 .product(name: "Sparkle", package: "Sparkle")
             ],
-            path: "Sources/Dockly"
+            path: "Sources/Dockly",
+            linkerSettings: [
+                // Weak-link CoreAudio so the macOS-14.4 process-tap class
+                // (CATapDescription) is a weak symbol — null on macOS 13 instead
+                // of blocking launch. DJ mode stays #available-guarded at runtime.
+                .unsafeFlags(["-Xlinker", "-weak_framework", "-Xlinker", "CoreAudio"])
+            ]
         )
     ]
 )

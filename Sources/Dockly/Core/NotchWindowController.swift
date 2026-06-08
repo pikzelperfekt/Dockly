@@ -42,6 +42,11 @@ private final class PillView<V: View>: NSHostingView<V> {
     override func mouseEntered(with event: NSEvent) { onEnter?() }
     override func mouseExited(with event: NSEvent)  { onExit?()  }
 
+    // Deliver the FIRST click to the content even when the panel isn't key —
+    // otherwise the first click is swallowed activating the window (the
+    // "have to click twice to open" bug).
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
     // Two-finger horizontal swipe → previous / next tab.
     // Only treat the very start of a trackpad gesture as a "swipe" so we don't
     // fire on regular scrolling that happens to drift sideways.
@@ -108,6 +113,7 @@ final class NotchWindowController: NSObject, ObservableObject {
     private var contentMaskLayer: CAShapeLayer?
     private var shadowLayer: CAShapeLayer?
     let concaveTop: CGFloat = 11      // inverted top-corner radius
+    let expandedTabBarHeight: CGFloat = 30   // reserved row for the tab bar
     // Transparent margin around the pill inside the window, so the drop shadow
     // has room to render (sides + bottom; the top stays flush to the screen).
     let shadowMargin: CGFloat = 14
@@ -385,7 +391,8 @@ final class NotchWindowController: NSObject, ObservableObject {
         let compactExtraH = CGFloat(s.compactExtraHeight)
         // Use the active tab's preferred content height (plus user nudge) when
         // expanded; a small extra strip when compact.
-        let expH = s.activeTab.contentHeight + CGFloat(s.expandedExtraHeight)
+        // Expanded height = the tab's body height + the reserved tab-bar row.
+        let expH = s.activeTab.contentHeight + expandedTabBarHeight + CGFloat(s.expandedExtraHeight)
         let extraH: CGFloat = expanded ? expH
             : (peeking ? peekContentH + compactExtraH : compactExtraH)
         let rawW: CGFloat = expanded ? expandedW : (nw + compactExtension * 2)

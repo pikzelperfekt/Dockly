@@ -11,11 +11,30 @@ struct BelowNotchContent<Content: View>: View {
         VStack(spacing: 0) {
             Color.clear.frame(height: notch.notchH + notch.belowNotch)
             content()
-                .padding(.horizontal, 12)
-                .padding(.top, 2)
-                .padding(.bottom, 2)
+                .padding(.horizontal, 14)
+                .padding(.top, 6)
+                .padding(.bottom, 8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+}
+
+// A subtle "frosted obsidian" card — the layered dark surface things float on.
+struct NookCard<Content: View>: View {
+    var padding: CGFloat = 10
+    @ViewBuilder var content: () -> Content
+    var body: some View {
+        content()
+            .padding(padding)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(.white.opacity(0.055))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(.white.opacity(0.06), lineWidth: 0.5)
+                    )
+            )
     }
 }
 
@@ -211,58 +230,44 @@ struct MusicTabView: View {
 
     var body: some View {
         let (c1, c2) = MusicApp.accentColor(forBundle: bundleId)
-        // Skip the notch row, then lay everything out vcentered in the
-        // remaining below-notch space. Art on left, title in middle,
-        // controls on right — all vertically centered.
         VStack(spacing: 0) {
             Color.clear.frame(height: notch.notchH + notch.belowNotch)
 
-            ZStack {
-                // Centered title + artist, capped so it never bleeds into the controls
-                VStack(spacing: 1) {
-                    Text(title)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white.opacity(isPlaying ? 1.0 : 0.65))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Text(artist)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(isPlaying ? 0.55 : 0.40))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: notch.panelW * 0.45)
-
-                // Left: album art / thumbnail, vcentered. Click → focus source app.
-                HStack {
+            VStack(spacing: 9) {
+                // Now-playing row: art · title/artist · transport (macOS style).
+                HStack(spacing: 12) {
                     artHolder(c1: c1, c2: c2)
-                        .padding(.leading, 10)
                         .onTapGesture { activateSourceApp() }
                         .help("Open \(appName)")
-                    Spacer(minLength: 0)
-                }
 
-                // Right: controls, vcentered
-                HStack {
-                    Spacer(minLength: 0)
-                    HStack(spacing: 2) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.white.opacity(isPlaying ? 1.0 : 0.65))
+                            .lineLimit(1).truncationMode(.tail)
+                        Text(artist)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(isPlaying ? 0.55 : 0.40))
+                            .lineLimit(1).truncationMode(.tail)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    HStack(spacing: 3) {
                         circleButton("backward.fill", size: 11, padding: 6) { activities.previousTrack() }
                         circleButton(isPlaying ? "pause.fill" : "play.fill",
-                                     size: 14, padding: 8, accent: true) { activities.playPause() }
+                                     size: 14, padding: 9, accent: true) { activities.playPause() }
                         circleButton("forward.fill", size: 11, padding: 6) { activities.nextTrack() }
                     }
-                    .padding(.trailing, 10)
                 }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Scrubber along the bottom — tinted to the album accent.
-            if let progress = activities.playback {
-                ScrubberView(progress: progress, accent: activities.accent) { activities.seek(to: $0) }
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 6)
+                // Scrubber along the bottom — tinted to the album accent.
+                if let progress = activities.playback {
+                    ScrubberView(progress: progress, accent: activities.accent) { activities.seek(to: $0) }
+                }
+                Spacer(minLength: 0)
             }
+            .padding(.horizontal, 14)
+            .padding(.top, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -489,21 +494,21 @@ private struct TrayItemTile: View {
     @State private var hovering = false
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 3) {
             ZStack(alignment: .topTrailing) {
                 Image(nsImage: item.icon)
                     .resizable()
                     .interpolation(.high)
-                    .frame(width: 48, height: 48)
+                    .frame(width: 40, height: 40)
 
                 if hovering {
                     Button(action: onRemove) {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 14))
+                            .font(.system(size: 13))
                             .foregroundStyle(.white, .black.opacity(0.7))
                     }
                     .buttonStyle(.plain)
-                    .offset(x: 4, y: -4)
+                    .offset(x: 5, y: -5)
                 }
             }
             Text(item.originalName)
@@ -511,9 +516,9 @@ private struct TrayItemTile: View {
                 .foregroundStyle(.white.opacity(0.7))
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .frame(width: 64)
+                .frame(width: 56)
         }
-        .padding(6)
+        .padding(5)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(.white.opacity(hovering ? 0.08 : 0.0))
