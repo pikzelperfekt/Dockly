@@ -38,8 +38,6 @@ struct LiveTabView: View {
                                               minutes: minutes, timeStr: timeStr) }
             case let .battery(event, percent):
                 BelowNotchContent { batteryView(event: event, percent: percent) }
-            case let .volume(percent, muted):
-                BelowNotchContent { volumeView(percent: percent, muted: muted) }
             case let .bluetooth(name, connected, icon):
                 BelowNotchContent { bluetoothView(name: name, connected: connected, icon: icon) }
             case let .focus(on):
@@ -69,33 +67,6 @@ struct LiveTabView: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-    }
-
-    private func volumeView(percent: Int, muted: Bool) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: muted ? "speaker.slash.fill"
-                  : percent == 0 ? "speaker.fill"
-                  : percent < 40 ? "speaker.wave.1.fill"
-                  : percent < 75 ? "speaker.wave.2.fill" : "speaker.wave.3.fill")
-                .font(.system(size: 22, weight: .medium))
-                .foregroundStyle(muted ? .red : .white)
-                .frame(width: 30)
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.2)).frame(height: 6)
-                    Capsule().fill(muted ? Color.red : .white)
-                        .frame(width: geo.size.width * CGFloat(muted ? 0 : percent) / 100, height: 6)
-                }
-                .frame(maxHeight: .infinity, alignment: .center)
-            }
-            .frame(height: 14)
-            Text("\(muted ? 0 : percent)")
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(.white.opacity(0.6))
-                .frame(width: 26, alignment: .trailing)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func bluetoothView(name: String, connected: Bool, icon: String) -> some View {

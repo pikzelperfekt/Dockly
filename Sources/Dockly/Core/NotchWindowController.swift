@@ -478,7 +478,7 @@ final class NotchWindowController: NSObject, ObservableObject {
         }
         hv.isPanelExpanded = { [weak self] in self?.isExpanded ?? false }
         hv.onVolumeScroll = { step in
-            VolumeMonitor.shared.adjust(byPercent: Int(step) * 4)
+            VolumeControl.shared.adjust(byPercent: Int(step) * 4)
         }
 
         hv.frame = container.bounds
@@ -522,7 +522,6 @@ final class NotchWindowController: NSObject, ObservableObject {
         // Transient info pops keep full width so interrupting music doesn't
         // cause a shrink-then-grow wobble.
         case .battery:       return base
-        case .volume:        return base
         case .bluetooth:     return base
         case .focus:         return base
         case .timer:         return base * 0.9

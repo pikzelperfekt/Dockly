@@ -116,8 +116,7 @@ struct DocklyPanelView: View {
                 if controller.isPeeking { controller.peek(false) }
             }
             // Gentle bounce when the activity changes — but NOT for the frequent
-            // info pops (volume/battery/etc.), which looked jittery, especially
-            // while scrubbing volume.
+            // info pops (battery/bluetooth/etc.), which looked jittery.
             if shouldBounce(for: new) {
                 popScale = 1.06
                 withAnimation(.spring(response: 0.36, dampingFraction: 0.82)) { popScale = 1.0 }
@@ -134,7 +133,7 @@ struct DocklyPanelView: View {
     // Bounce only for meaningful changes — skip the rapid info pops.
     private func shouldBounce(for activity: LiveActivity) -> Bool {
         switch activity {
-        case .volume, .battery, .bluetooth, .focus: return false
+        case .battery, .bluetooth, .focus: return false
         default: return true
         }
     }
@@ -287,10 +286,6 @@ struct DocklyPanelView: View {
             Image(systemName: batteryGlyph(event: event, percent: percent))
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(batteryColor(event))
-        case let .volume(_, muted):
-            Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.white)
         case let .bluetooth(_, connected, icon):
             Image(systemName: icon)
                 .font(.system(size: 11, weight: .semibold))
@@ -351,17 +346,6 @@ struct DocklyPanelView: View {
                 .font(.system(size: 10, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(.white)
-        case let .volume(percent, muted):
-            // Tiny volume bar
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.2))
-                    Capsule().fill(muted ? Color.red : .white)
-                        .frame(width: geo.size.width * CGFloat(muted ? 0 : percent) / 100)
-                }
-            }
-            .frame(height: 4)
-            .padding(.horizontal, 4)
         case let .bluetooth(_, connected, _):
             Image(systemName: connected ? "checkmark" : "xmark")
                 .font(.system(size: 9, weight: .bold))

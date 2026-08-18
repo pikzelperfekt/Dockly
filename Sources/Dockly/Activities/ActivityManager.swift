@@ -9,7 +9,6 @@ enum LiveActivity: Equatable {
     case music(title: String, artist: String, isPlaying: Bool, bundleId: String?, artwork: Data?)
     case upcomingEvent(title: String, calendarColor: CGColor, minutesUntil: Int, timeString: String)
     case battery(BatteryMonitor.BatteryEvent, percent: Int)
-    case volume(Int, muted: Bool)
     case bluetooth(name: String, connected: Bool, icon: String)
     case focus(on: Bool)
     case timer(state: TimerManager.State)
@@ -24,8 +23,6 @@ enum LiveActivity: Equatable {
             return t1==t2 && m1==m2
         case let (.battery(e1,p1), .battery(e2,p2)):
             return e1==e2 && p1==p2
-        case let (.volume(v1,m1), .volume(v2,m2)):
-            return v1==v2 && m1==m2
         case let (.bluetooth(n1,c1,_), .bluetooth(n2,c2,_)):
             return n1==n2 && c1==c2
         case let (.focus(o1), .focus(o2)):
@@ -110,7 +107,6 @@ final class ActivityManager: ObservableObject {
     private var artworkRetryKey: String?
     private var artworkRetryCount = 0
     private var batterySink: AnyCancellable?
-    private var volumeSink: AnyCancellable?
     private var bluetoothSink: AnyCancellable?
     private var focusSink: AnyCancellable?
     private var timerSink: AnyCancellable?
@@ -149,7 +145,7 @@ final class ActivityManager: ObservableObject {
         didSet { if !holdTransient, oldValue { rearmTransientClear(after: 1.2) } }
     }
 
-    /// Briefly take over the pill with a transient activity (volume, battery,
+    /// Briefly take over the pill with a transient activity (battery,
     /// bluetooth…), then restore whatever was showing.
     private func showTransient(_ activity: LiveActivity, seconds: Double = 3) {
         transientActive = true
@@ -238,7 +234,7 @@ final class ActivityManager: ObservableObject {
     }
 
     /// Boot every system-state monitor that can take over the pill with a
-    /// transient activity: battery, volume, bluetooth, focus, and the timer.
+    /// transient activity: battery, bluetooth, focus, and the timer.
     private func startSystemMonitors() {
         BatteryMonitor.shared.start()
         batterySink = BatteryMonitor.shared.$event.sink { [weak self] event in
@@ -247,12 +243,10 @@ final class ActivityManager: ObservableObject {
             self.showTransient(.battery(event, percent: pct), seconds: 4)
         }
 
-        // Output volume / mute → brief volume HUD.
-        VolumeMonitor.shared.start()
-        volumeSink = VolumeMonitor.shared.$event.sink { [weak self] e in
-            guard let self, let e else { return }
-            self.showTransient(.volume(e.percent, muted: e.muted), seconds: 1.6)
-        }
+        // Scroll-over-the-pill volume control. Deliberately silent: macOS
+        // already draws its own volume HUD, and a second one in the notch was
+        // just noise on top of it.
+        VolumeControl.shared.start()
 
         // Bluetooth connect / disconnect → brief device pill.
         BluetoothMonitor.shared.start()
