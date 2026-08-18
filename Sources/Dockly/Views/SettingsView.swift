@@ -6,6 +6,10 @@ struct SettingsView: View {
 
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var captureFormat = ScreenshotWatcher.captureFormat()
+    @State private var captureHDR = ScreenshotWatcher.captureHDR()
+
+    /// PNG + HDR capture is a dead end: macOS refuses to write the file at all.
+    private var screenshotsAreBroken: Bool { captureFormat == "png" && captureHDR }
 
     // DJ mode relies on Core Audio process taps (macOS 14.4+).
     private var djModeSupported: Bool {
@@ -55,12 +59,13 @@ struct SettingsView: View {
                 }
                 LabeledContent("Capture format") {
                     HStack(spacing: 8) {
-                        Text(captureFormat.uppercased())
-                            .foregroundStyle(captureFormat == "png" ? Color.secondary : Color.orange)
-                        if captureFormat != "png" {
-                            Button("Use PNG") {
+                        Text(captureFormat.uppercased() + (captureHDR ? " + HDR" : ""))
+                            .foregroundStyle(captureFormat == "png" && !captureHDR
+                                             ? Color.secondary : Color.orange)
+                        if captureFormat != "png" || captureHDR {
+                            Button(screenshotsAreBroken ? "Fix" : "Use PNG") {
                                 ScreenshotWatcher.setCaptureFormat("png")
-                                captureFormat = ScreenshotWatcher.captureFormat()
+                                refreshCaptureState()
                             }
                         }
                     }
@@ -68,11 +73,9 @@ struct SettingsView: View {
             } header: {
                 Text("Screenshot Shelf")
             } footer: {
-                Text(captureFormat == "png"
-                     ? "A screenshot you take shows up in the notch for a few seconds — drag it straight into another app, copy it, or bin it. Dockly watches the folder Screenshot.app saves to (⇧⌘5 ▸ Options)."
-                     : "macOS is saving screenshots as \(captureFormat.uppercased()), which most upload forms reject. Switching to PNG restarts the menu bar for a moment.")
+                Text(screenshotFooter)
             }
-            .onAppear { captureFormat = ScreenshotWatcher.captureFormat() }
+            .onAppear { refreshCaptureState() }
 
             Section {
                 Picker("Open the panel on", selection: $settings.expandTrigger) {
@@ -312,6 +315,21 @@ struct SettingsView: View {
             get: { Color(nsColor: NSColor(hex: settings.pillEdgeColor2Hex) ?? .systemPurple) },
             set: { settings.pillEdgeColor2Hex = NSColor($0).hexString }
         )
+    }
+
+    private func refreshCaptureState() {
+        captureFormat = ScreenshotWatcher.captureFormat()
+        captureHDR = ScreenshotWatcher.captureHDR()
+    }
+
+    private var screenshotFooter: String {
+        if screenshotsAreBroken {
+            return "macOS is set to PNG with HDR capture on, and it can't write an HDR image into a PNG — ⇧⌘4 fails with “Failure to write image data.” Fix turns HDR capture off."
+        }
+        if captureFormat != "png" {
+            return "macOS is saving screenshots as \(captureFormat.uppercased()), which most upload forms reject. Switching to PNG restarts the menu bar for a moment."
+        }
+        return "A screenshot you take shows up in the notch for a few seconds — drag it straight into another app, copy it, or bin it. Dockly watches the folder Screenshot.app saves to (⇧⌘5 ▸ Options)."
     }
 
     private var screenshotFolderName: String {

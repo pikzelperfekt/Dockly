@@ -82,9 +82,25 @@ final class ScreenshotWatcher: ObservableObject {
         return fmt.isEmpty ? "png" : fmt
     }
 
+    /// True when macOS is capturing HDR. PNG carries no HDR gain map, so leaving
+    /// this on while forcing `type = png` makes the interactive (⇧⌘4) save fail
+    /// outright with "Failure to write image data" — the CLI path still works,
+    /// which makes it a miserable thing to diagnose. Switching to PNG has to
+    /// turn it off as well or we'd hand the user a broken screenshot key.
+    static func captureHDR() -> Bool {
+        guard let v = CFPreferencesCopyAppValue("captureHDR" as CFString,
+                                                "com.apple.screencapture" as CFString)
+        else { return false }
+        return (v as? NSNumber)?.boolValue ?? false
+    }
+
     static func setCaptureFormat(_ format: String) {
         CFPreferencesSetAppValue("type" as CFString, format as CFString,
                                  "com.apple.screencapture" as CFString)
+        if format == "png" && captureHDR() {
+            CFPreferencesSetAppValue("captureHDR" as CFString, kCFBooleanFalse,
+                                     "com.apple.screencapture" as CFString)
+        }
         CFPreferencesAppSynchronize("com.apple.screencapture" as CFString)
         // The capture UI reads this once at launch; SystemUIServer comes straight
         // back on its own, so a restart is the supported way to apply it.
