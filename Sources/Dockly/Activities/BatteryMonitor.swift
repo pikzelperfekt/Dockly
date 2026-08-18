@@ -62,8 +62,9 @@ final class BatteryMonitor: ObservableObject {
         }
         lastCharging = snapshot.isPluggedIn
 
-        // Full
-        if snapshot.isPluggedIn && snapshot.percent >= 100 && prev?.percent ?? 0 < 100 {
+        // Full — only on the transition, never on the first reading, or launching
+        // with the lid plugged in at 100% pops a "Fully Charged" pill every time.
+        if let prev, snapshot.isPluggedIn, snapshot.percent >= 100, prev.percent < 100 {
             fire(.full)
         }
 

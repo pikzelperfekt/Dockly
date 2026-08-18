@@ -55,8 +55,11 @@ final class TimerManager: ObservableObject {
         guard isActive else { return }
         total += 60
         remaining += 60
-        if state == .running { endDate = Date().addingTimeInterval(remaining) }
+        // Revive a finished timer BEFORE re-deriving endDate — doing it the other
+        // way round left the old, already-elapsed endDate in place, so the first
+        // tick fired finish() again and "+1 min" just re-rang the chime.
         if state == .finished { state = .running; startTicker() }
+        if state == .running { endDate = Date().addingTimeInterval(remaining) }
     }
 
     private func startTicker() {

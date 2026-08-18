@@ -19,25 +19,6 @@ struct BelowNotchContent<Content: View>: View {
     }
 }
 
-// A subtle "frosted obsidian" card — the layered dark surface things float on.
-struct NookCard<Content: View>: View {
-    var padding: CGFloat = 10
-    @ViewBuilder var content: () -> Content
-    var body: some View {
-        content()
-            .padding(padding)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(.white.opacity(0.055))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .strokeBorder(.white.opacity(0.06), lineWidth: 0.5)
-                    )
-            )
-    }
-}
-
 // MARK: - Live tab — wraps the existing music / clock / event live content
 
 struct LiveTabView: View {
@@ -65,6 +46,8 @@ struct LiveTabView: View {
                 BelowNotchContent { focusView(on: on) }
             case .timer:
                 BelowNotchContent { TimerRunningView() }
+            case let .screenshot(shot):
+                BelowNotchContent { ScreenshotShelfView(shot: shot) }
             }
         }
     }
@@ -400,6 +383,141 @@ private struct ScrubberView: View {
     }
 }
 
+
+// MARK: - Screenshot shelf
+// The freshly-taken screenshot, parked in the notch: grab it and drag it into
+// whatever you were going to paste it in, or take one of the shortcuts. The
+// pill holds itself open the whole time the cursor is on it.
+
+struct ScreenshotShelfView: View {
+    let shot: ScreenshotWatcher.Shot
+
+    @State private var hoveringImage = false
+    @State private var copied = false
+    @State private var stashed = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            draggableThumb
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Screenshot")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.45))
+                    .textCase(.uppercase)
+                HStack(spacing: 5) {
+                    Text(shot.name)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.75))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if !ScreenshotWatcher.isPNG(shot.url) {
+                        Text(shot.url.pathExtension.uppercased())
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal, 4).padding(.vertical, 1)
+                            .background(Capsule().fill(.orange.opacity(0.16)))
+                            .help("Most upload forms reject this format — Make PNG fixes it.")
+                    }
+                }
+
+                HStack(spacing: 6) {
+                    action(copied ? "checkmark" : "doc.on.doc",
+                           copied ? "Copied" : "Copy", tint: copied ? .green : nil) {
+                        ScreenshotWatcher.shared.copyToPasteboard(shot)
+                        flash($copied)
+                    }
+                    // Only when it matters: a HEIC/TIFF capture is the one most
+                    // upload forms reject, and converting it is the whole fix.
+                    if !ScreenshotWatcher.isPNG(shot.url) {
+                        action("arrow.triangle.2.circlepath", "Make PNG", tint: .orange) {
+                            ScreenshotWatcher.shared.convertToPNG(shot)
+                        }
+                    } else {
+                        action(stashed ? "checkmark" : "tray.and.arrow.down",
+                               stashed ? "In tray" : "Tray", tint: stashed ? .green : nil) {
+                            ScreenshotWatcher.shared.addToTray(shot)
+                            flash($stashed)
+                        }
+                    }
+                    action("folder", "Show") { ScreenshotWatcher.shared.reveal(shot) }
+                    action("trash", "Delete", tint: .red.opacity(0.85)) {
+                        ScreenshotWatcher.shared.trash(shot)
+                        ActivityManager.shared.dismissTransient()
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    }
+
+    private var draggableThumb: some View {
+        ScreenshotThumb(shot: shot, width: 108, height: 68, corner: 8)
+            .overlay(alignment: .bottom) {
+                if hoveringImage {
+                    Text("Drag me")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Capsule().fill(.black.opacity(0.6)))
+                        .padding(.bottom, 5)
+                        .transition(.opacity)
+                }
+            }
+            .scaleEffect(hoveringImage ? 1.03 : 1.0)
+            .animation(.spring(response: 0.28, dampingFraction: 0.7), value: hoveringImage)
+            .onHover { hoveringImage = $0 }
+            .onDrag {
+                // The pill would otherwise collapse the instant the cursor
+                // leaves it, killing the drag it just started.
+                DocklyDragLock.begin()
+                return NSItemProvider(contentsOf: shot.url) ?? NSItemProvider()
+            }
+    }
+
+    private func flash(_ flag: Binding<Bool>) {
+        withAnimation(.easeOut(duration: 0.15)) { flag.wrappedValue = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+            withAnimation(.easeOut(duration: 0.2)) { flag.wrappedValue = false }
+        }
+    }
+
+    private func action(_ icon: String, _ label: String, tint: Color? = nil,
+                        run: @escaping () -> Void) -> some View {
+        ShelfActionButton(icon: icon, label: label, tint: tint, action: run)
+    }
+}
+
+private struct ShelfActionButton: View {
+    let icon: String
+    let label: String
+    var tint: Color?
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 9, weight: .semibold))
+                Text(label)
+                    .font(.system(size: 10, weight: .medium))
+            }
+            .foregroundStyle(tint ?? .white.opacity(hovering ? 0.95 : 0.7))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(
+                Capsule().fill(.white.opacity(hovering ? 0.14 : 0.07))
+            )
+            .contentShape(Capsule())
+        }
+        .buttonStyle(PressableStyle(scale: 0.92))
+        .onHover { hovering = $0 }
+    }
+}
+
 // MARK: - Tray tab
 
 struct TrayTabView: View {
@@ -531,104 +649,8 @@ private struct TrayItemTile: View {
             Button("Remove", role: .destructive) { onRemove() }
         }
         .onDrag {
-            NSItemProvider(contentsOf: item.url) ?? NSItemProvider()
-        }
-    }
-}
-
-// MARK: - Calendar tab (removed — kept private as the upcoming-event live
-// activity still uses CalendarListStore via ActivityManager)
-
-private struct CalendarTabView_Removed: View {
-    @ObservedObject var store: CalendarListStore = .shared
-
-    var body: some View {
-        BelowNotchContent { calendarBody }
-    }
-
-    private var calendarBody: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("Today")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.45))
-                    .textCase(.uppercase)
-                Spacer()
-                Text(Date(), format: .dateTime.weekday(.abbreviated).month().day())
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.4))
-            }
-            if !store.authorized {
-                permissionView
-            } else if store.events.isEmpty {
-                emptyView
-            } else {
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(store.events) { ev in
-                            EventRow(event: ev)
-                        }
-                    }
-                }
-            }
-        }
-        .onAppear { store.refresh() }
-    }
-
-    private var emptyView: some View {
-        VStack(spacing: 4) {
-            Image(systemName: "calendar")
-                .font(.system(size: 20))
-                .foregroundStyle(.white.opacity(0.3))
-            Text("Nothing on the books")
-                .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.4))
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var permissionView: some View {
-        VStack(spacing: 6) {
-            Image(systemName: "calendar.badge.exclamationmark")
-                .font(.system(size: 20))
-                .foregroundStyle(.white.opacity(0.4))
-            Text("Calendar access not granted")
-                .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.5))
-            Button("Request access") { store.requestAccess() }
-                .buttonStyle(.borderless)
-                .controlSize(.small)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-private struct EventRow: View {
-    let event: DayEvent
-
-    var body: some View {
-        HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 2)
-                .fill(Color(nsColor: event.color))
-                .frame(width: 3, height: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(event.title)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                HStack(spacing: 5) {
-                    Text(event.startString)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Color(nsColor: event.color).opacity(0.95))
-                    if let loc = event.location {
-                        Text("· \(loc)")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.white.opacity(0.4))
-                            .lineLimit(1)
-                    }
-                }
-            }
-            Spacer(minLength: 0)
+            DocklyDragLock.begin()
+            return NSItemProvider(contentsOf: item.url) ?? NSItemProvider()
         }
     }
 }

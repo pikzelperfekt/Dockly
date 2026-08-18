@@ -97,13 +97,6 @@ final class AppSettings: ObservableObject {
     @Published var lifeDashboardURL: String {
         didSet { store("ld_url", lifeDashboardURL) }
     }
-    @Published var enabledWidgets: Set<String> {
-        didSet {
-            if let data = try? JSONEncoder().encode(enabledWidgets) {
-                UserDefaults.standard.set(data, forKey: "enabled_widgets")
-            }
-        }
-    }
     @Published var enabledTabs: Set<DocklyTab> {
         didSet {
             if let data = try? JSONEncoder().encode(enabledTabs) {
@@ -196,6 +189,17 @@ final class AppSettings: ObservableObject {
     @Published var djBeatBounce: Bool {             // pill bounces on the bass
         didSet { store("dj_beat_bounce", djBeatBounce) }
     }
+    @Published var pausedMusicTimeout: Double {     // minutes paused before the pill reverts to idle; 0 = never
+        didSet { store("paused_music_timeout", pausedMusicTimeout) }
+    }
+    /// Catch new screenshots in the notch so they can be dragged straight out.
+    @Published var screenshotShelf: Bool {
+        didSet { store("screenshot_shelf", screenshotShelf) }
+    }
+    /// Also stash every caught screenshot in the File Tray automatically.
+    @Published var screenshotAutoTray: Bool {
+        didSet { store("screenshot_auto_tray", screenshotAutoTray) }
+    }
     // Which calendars feed the upcoming-event activity. Empty = all calendars.
     @Published var selectedCalendarIDs: Set<String> {
         didSet {
@@ -216,13 +220,6 @@ final class AppSettings: ObservableObject {
         expandTrigger = ExpandTrigger(rawValue: ud.string(forKey: "expand_trigger") ?? "") ?? .hover
         autoCollapseDelay = ud.double(forKey: "collapse_delay") > 0 ? ud.double(forKey: "collapse_delay") : 0.6
         lifeDashboardURL = ud.string(forKey: "ld_url") ?? "http://localhost:3000"
-
-        if let data = ud.data(forKey: "enabled_widgets"),
-           let decoded = try? JSONDecoder().decode(Set<String>.self, from: data) {
-            enabledWidgets = decoded
-        } else {
-            enabledWidgets = ["clock", "tasks", "calendar"]
-        }
 
         if let data = ud.data(forKey: "enabled_tabs"),
            let decoded = try? JSONDecoder().decode(Set<DocklyTab>.self, from: data) {
@@ -269,6 +266,11 @@ final class AppSettings: ObservableObject {
         djReactSpeed = ud.object(forKey: "dj_react_speed") != nil ? ud.bool(forKey: "dj_react_speed") : true
         djReactPulse = ud.object(forKey: "dj_react_pulse") != nil ? ud.bool(forKey: "dj_react_pulse") : true
         djBeatBounce = ud.bool(forKey: "dj_beat_bounce")
+        pausedMusicTimeout = ud.object(forKey: "paused_music_timeout") != nil
+            ? ud.double(forKey: "paused_music_timeout") : 5
+        screenshotShelf = ud.object(forKey: "screenshot_shelf") != nil
+            ? ud.bool(forKey: "screenshot_shelf") : true
+        screenshotAutoTray = ud.bool(forKey: "screenshot_auto_tray")
         if let data = ud.data(forKey: "selected_calendar_ids"),
            let decoded = try? JSONDecoder().decode(Set<String>.self, from: data) {
             selectedCalendarIDs = decoded

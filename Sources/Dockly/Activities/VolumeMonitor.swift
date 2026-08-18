@@ -33,6 +33,10 @@ final class VolumeMonitor: ObservableObject {
             self.removeListeners()
             self.deviceID = self.defaultOutputDevice()
             self.addListeners()
+            // Re-baseline against the new device, or the first change on it is
+            // swallowed whenever it happens to match the old device's level.
+            self.lastPercent = self.currentPercent()
+            self.lastMuted = self.currentMuted()
         }
         // Seed baseline so the very first change is what fires the HUD.
         lastPercent = currentPercent()
@@ -59,20 +63,33 @@ final class VolumeMonitor: ObservableObject {
         mScope: kAudioObjectPropertyScopeOutput,
         mElement: kAudioObjectPropertyElementMain)
 
+    // CoreAudio matches listeners by BLOCK IDENTITY, so the exact block that was
+    // registered has to be handed back to remove it. Keep them around — passing a
+    // freshly-written closure removes nothing and leaks a listener on every
+    // output-device change (headphones in/out), which then fires HUDs for a
+    // device the user isn't listening to any more.
+    private var volumeListener: AudioObjectPropertyListenerBlock?
+    private var muteListener: AudioObjectPropertyListenerBlock?
+
     private func addListeners() {
         guard deviceID != kAudioObjectUnknown else { return }
-        AudioObjectAddPropertyListenerBlock(deviceID, &volumeAddr, DispatchQueue.main) { [weak self] _, _ in
-            self?.fire()
-        }
-        AudioObjectAddPropertyListenerBlock(deviceID, &muteAddr, DispatchQueue.main) { [weak self] _, _ in
-            self?.fire()
-        }
+        let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in self?.fire() }
+        let muteBlock: AudioObjectPropertyListenerBlock = { [weak self] _, _ in self?.fire() }
+        AudioObjectAddPropertyListenerBlock(deviceID, &volumeAddr, DispatchQueue.main, block)
+        AudioObjectAddPropertyListenerBlock(deviceID, &muteAddr, DispatchQueue.main, muteBlock)
+        volumeListener = block
+        muteListener = muteBlock
     }
 
     private func removeListeners() {
+        defer { volumeListener = nil; muteListener = nil }
         guard deviceID != kAudioObjectUnknown else { return }
-        AudioObjectRemovePropertyListenerBlock(deviceID, &volumeAddr, DispatchQueue.main) { _, _ in }
-        AudioObjectRemovePropertyListenerBlock(deviceID, &muteAddr, DispatchQueue.main) { _, _ in }
+        if let block = volumeListener {
+            AudioObjectRemovePropertyListenerBlock(deviceID, &volumeAddr, DispatchQueue.main, block)
+        }
+        if let block = muteListener {
+            AudioObjectRemovePropertyListenerBlock(deviceID, &muteAddr, DispatchQueue.main, block)
+        }
     }
 
     private func fire() {

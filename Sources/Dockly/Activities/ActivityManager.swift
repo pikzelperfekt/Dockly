@@ -13,6 +13,7 @@ enum LiveActivity: Equatable {
     case bluetooth(name: String, connected: Bool, icon: String)
     case focus(on: Bool)
     case timer(state: TimerManager.State)
+    case screenshot(ScreenshotWatcher.Shot)
 
     static func == (lhs: LiveActivity, rhs: LiveActivity) -> Bool {
         switch (lhs, rhs) {
@@ -31,6 +32,8 @@ enum LiveActivity: Equatable {
             return o1==o2
         case let (.timer(s1), .timer(s2)):
             return s1==s2
+        case let (.screenshot(a), .screenshot(b)):
+            return a.url == b.url
         default: return false
         }
     }
@@ -111,20 +114,56 @@ final class ActivityManager: ObservableObject {
     private var bluetoothSink: AnyCancellable?
     private var focusSink: AnyCancellable?
     private var timerSink: AnyCancellable?
+    private var screenshotSink: AnyCancellable?
     private var timerActive = false
     private var calendarSelectionSink: AnyCancellable?
     private var audioReactiveSink: AnyCancellable?
     private var transientActive = false
     private var transientClearWork: DispatchWorkItem?
 
+    /// Auto-dismiss a paused track: if music sits paused (not playing) for the
+    /// user-configured timeout (Settings ▸ Music), the pill reverts to the idle
+    /// activity instead of showing a frozen paused track forever. Reset the
+    /// moment playback resumes.
+    private var pausedSince: Date?
+
+    /// Track how long music has been paused. Returns true once it has exceeded
+    /// the configured timeout and the music activity should be dropped. Playing
+    /// resets the clock; a timeout of 0 means "never auto-dismiss". NOTE: never
+    /// reset `pausedSince` from clearMusic() — doing so would re-arm the timer
+    /// right after a cooldown clear and flicker the pill back; only resumed
+    /// playback (or a disabled timeout) clears it.
+    private func shouldClearForPause(isPlaying: Bool) -> Bool {
+        if isPlaying { pausedSince = nil; return false }
+        let minutes = AppSettings.shared.pausedMusicTimeout
+        guard minutes > 0 else { pausedSince = nil; return false }  // 0 = never
+        let since = pausedSince ?? Date()
+        pausedSince = since
+        return Date().timeIntervalSince(since) >= minutes * 60
+    }
+
+    /// Set by the notch controller while the panel is open or the cursor is on
+    /// the pill. An interactive pop (a screenshot you're about to drag out) must
+    /// not expire from under the cursor mid-reach.
+    var holdTransient = false {
+        didSet { if !holdTransient, oldValue { rearmTransientClear(after: 1.2) } }
+    }
+
     /// Briefly take over the pill with a transient activity (volume, battery,
     /// bluetooth…), then restore whatever was showing.
     private func showTransient(_ activity: LiveActivity, seconds: Double = 3) {
         transientActive = true
         current = activity
+        rearmTransientClear(after: seconds)
+    }
+
+    private func rearmTransientClear(after seconds: Double) {
         transientClearWork?.cancel()
+        guard transientActive else { return }
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
+            // Still being looked at — check back rather than yanking it away.
+            if self.holdTransient { self.rearmTransientClear(after: 1.0); return }
             self.transientActive = false
             // Restore whatever should own the pill: timer > media > event/clock.
             if self.timerActive {
@@ -138,12 +177,26 @@ final class ActivityManager: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
     }
 
+    /// Drop an interactive transient (the screenshot shelf) on demand.
+    func dismissTransient() {
+        guard transientActive else { return }
+        holdTransient = false
+        transientClearWork?.cancel()
+        transientActive = false
+        if timerActive {
+            current = .timer(state: TimerManager.shared.state)
+        } else {
+            refreshMedia()
+            refreshEvents()
+        }
+    }
+
     // MARK: - Lifecycle
 
     func start() {
         checkCalendarAccess()
         startMediaListening()
-        startBatteryMonitoring()
+        startSystemMonitors()
         refreshMedia()
         refreshEvents()
         // Instant calendar refresh when events change or the calendar DB updates.
@@ -184,12 +237,21 @@ final class ActivityManager: ObservableObject {
         DispatchQueue.main.async { [weak self] in self?.refreshEvents() }
     }
 
-    private func startBatteryMonitoring() {
+    /// Boot every system-state monitor that can take over the pill with a
+    /// transient activity: battery, volume, bluetooth, focus, and the timer.
+    private func startSystemMonitors() {
         BatteryMonitor.shared.start()
         batterySink = BatteryMonitor.shared.$event.sink { [weak self] event in
             guard let self, let event else { return }
             let pct = BatteryMonitor.shared.state?.percent ?? 0
             self.showTransient(.battery(event, percent: pct), seconds: 4)
+        }
+
+        // Output volume / mute → brief volume HUD.
+        VolumeMonitor.shared.start()
+        volumeSink = VolumeMonitor.shared.$event.sink { [weak self] e in
+            guard let self, let e else { return }
+            self.showTransient(.volume(e.percent, muted: e.muted), seconds: 1.6)
         }
 
         // Bluetooth connect / disconnect → brief device pill.
@@ -205,6 +267,15 @@ final class ActivityManager: ObservableObject {
         focusSink = FocusMonitor.shared.$event.sink { [weak self] e in
             guard let self, let e else { return }
             self.showTransient(.focus(on: e.on), seconds: 2.5)
+        }
+
+        // A new screenshot landed → shelf pill you can drag straight out of.
+        // Held open for longer than the other pops: this one is interactive, and
+        // it stays put while the cursor is on it (see `holdTransient`).
+        ScreenshotWatcher.shared.start()
+        screenshotSink = ScreenshotWatcher.shared.$latest.sink { [weak self] shot in
+            guard let self, let shot else { return }
+            self.showTransient(.screenshot(shot), seconds: 6)
         }
 
         // Native timer — while active it owns the pill (above music/event/clock).
@@ -303,6 +374,12 @@ final class ActivityManager: ObservableObject {
         // info for a long time after an app quits. If we know which app owns
         // this snapshot and it's not running, treat it as no music.
         if let bundleId = snap.bundleId, !isAppRunning(bundleId: bundleId) {
+            clearMusic()
+            return
+        }
+        // Paused for too long → revert to idle instead of a frozen paused track.
+        if shouldClearForPause(isPlaying: snap.isPlaying) {
+            Self.debug("applyMusic — paused past cooldown, clearing")
             clearMusic()
             return
         }
@@ -457,6 +534,11 @@ final class ActivityManager: ObservableObject {
             // Returns nil only when the app is closed/stopped (then we clear).
             if let info = self.fetchAppleScriptNowPlaying() {
                 DispatchQueue.main.async {
+                    // Paused for too long → drop back to idle.
+                    if self.shouldClearForPause(isPlaying: info.isPlaying) {
+                        self.clearMusic()
+                        return
+                    }
                     let key = "\(info.title)|\(info.artist)"
                     self.current = .music(title: info.title, artist: info.artist,
                                           isPlaying: info.isPlaying, bundleId: info.bundleId,
@@ -475,6 +557,7 @@ final class ActivityManager: ObservableObject {
             if let b = BrowserMediaProbe.probe() {
                 Self.debug("Browser probe: \(b.title) [\(b.bundleId)] art=\(b.artworkURL.isEmpty ? "no" : "yes")")
                 DispatchQueue.main.async {
+                    _ = self.shouldClearForPause(isPlaying: true)  // browser media = playing; reset pause clock
                     let key = "\(b.title)|\(b.artist)"
                     self.mediaIsVideo = true
                     self.current = .music(title: b.title, artist: b.artist,

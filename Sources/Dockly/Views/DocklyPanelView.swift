@@ -55,9 +55,8 @@ struct DocklyPanelView: View {
 
     private let clockTick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
-    private var screen: NSScreen { NSScreen.main ?? NSScreen.screens.first! }
-    private var notchH: CGFloat { controller.notchHeight(screen: screen) }
-    private var notchW: CGFloat { controller.notchWidth(screen: screen) }
+    private var notchH: CGFloat { controller.notchMetrics.height }
+    private var notchW: CGFloat { controller.notchMetrics.width }
     private var deadZoneHeight: CGFloat { notchH + controller.belowNotch }
 
     private var visibleTabs: [DocklyTab] {
@@ -270,22 +269,6 @@ struct DocklyPanelView: View {
         return 1.0 + min(0.14, CGFloat(reactor.bass) * CGFloat(settings.djSensitivity) * 0.16)
     }
 
-    private func peekText(title: String, artist: String) -> some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                Text(artist)
-                    .font(.system(size: 9))
-                    .foregroundStyle(.white.opacity(0.55))
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 0)
-        }
-    }
-
     @ViewBuilder
     private var leftWing: some View {
         switch activities.current {
@@ -321,6 +304,8 @@ struct DocklyPanelView: View {
                   : state == .paused ? "pause.circle" : "timer")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(state == .finished ? Color.orange : .white)
+        case let .screenshot(shot):
+            ScreenshotThumb(shot: shot, width: 24, height: 15, corner: 3)
         }
     }
 
@@ -387,6 +372,10 @@ struct DocklyPanelView: View {
                 .foregroundStyle(.white)
         case let .timer(state):
             TimerCountdownLabel(finished: state == .finished)
+        case .screenshot:
+            Image(systemName: "hand.draw.fill")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.85))
         }
     }
 
@@ -501,6 +490,15 @@ private struct SettingsGearButton: View {
 
 extension Notification.Name {
     static let docklyOpenSettings = Notification.Name("docklyOpenSettings")
+    static let docklyDragOutBegan = Notification.Name("docklyDragOutBegan")
+}
+
+/// Tells the notch controller a drag is leaving the pill, so it holds the
+/// window open until the drop lands instead of collapsing under the cursor.
+enum DocklyDragLock {
+    static func begin() {
+        NotificationCenter.default.post(name: .docklyDragOutBegan, object: nil)
+    }
 }
 
 // MARK: - Tab bar button
@@ -537,6 +535,41 @@ private struct TabBarButton: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+    }
+}
+
+// MARK: - Screenshot thumbnail
+
+// Renders the captured image, falling back to a glyph if the thumbnail could
+// not be decoded (a screenshot mid-write, or a format ImageIO declined).
+struct ScreenshotThumb: View {
+    let shot: ScreenshotWatcher.Shot
+    var width: CGFloat
+    var height: CGFloat
+    var corner: CGFloat = 6
+
+    var body: some View {
+        Group {
+            if let data = shot.thumbnail, let img = NSImage(data: data) {
+                Image(nsImage: img)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                ZStack {
+                    Color.white.opacity(0.08)
+                    Image(systemName: "camera.viewfinder")
+                        .font(.system(size: min(width, height) * 0.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+            }
+        }
+        .frame(width: width, height: height)
+        .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: corner, style: .continuous)
+                .strokeBorder(.white.opacity(0.18), lineWidth: 0.5)
+        )
     }
 }
 

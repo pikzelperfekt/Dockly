@@ -5,6 +5,7 @@ struct SettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
 
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
+    @State private var captureFormat = ScreenshotWatcher.captureFormat()
 
     // DJ mode relies on Core Audio process taps (macOS 14.4+).
     private var djModeSupported: Bool {
@@ -45,6 +46,33 @@ struct SettingsView: View {
                     Text("Launch at login works once Dockly is in /Applications.")
                 }
             }
+
+            Section {
+                Toggle("Catch new screenshots", isOn: $settings.screenshotShelf)
+                if settings.screenshotShelf {
+                    Toggle("Also add them to the File Tray", isOn: $settings.screenshotAutoTray)
+                    LabeledContent("Watching", value: screenshotFolderName)
+                }
+                LabeledContent("Capture format") {
+                    HStack(spacing: 8) {
+                        Text(captureFormat.uppercased())
+                            .foregroundStyle(captureFormat == "png" ? Color.secondary : Color.orange)
+                        if captureFormat != "png" {
+                            Button("Use PNG") {
+                                ScreenshotWatcher.setCaptureFormat("png")
+                                captureFormat = ScreenshotWatcher.captureFormat()
+                            }
+                        }
+                    }
+                }
+            } header: {
+                Text("Screenshot Shelf")
+            } footer: {
+                Text(captureFormat == "png"
+                     ? "A screenshot you take shows up in the notch for a few seconds — drag it straight into another app, copy it, or bin it. Dockly watches the folder Screenshot.app saves to (⇧⌘5 ▸ Options)."
+                     : "macOS is saving screenshots as \(captureFormat.uppercased()), which most upload forms reject. Switching to PNG restarts the menu bar for a moment.")
+            }
+            .onAppear { captureFormat = ScreenshotWatcher.captureFormat() }
 
             Section {
                 Picker("Open the panel on", selection: $settings.expandTrigger) {
@@ -122,6 +150,22 @@ struct SettingsView: View {
 
     private var musicTab: some View {
         Form {
+            Section {
+                HStack {
+                    Text("Dismiss when paused")
+                    Slider(value: $settings.pausedMusicTimeout, in: 0...30, step: 1)
+                    Text(settings.pausedMusicTimeout == 0
+                         ? "Never"
+                         : "\(Int(settings.pausedMusicTimeout)) min")
+                        .monospacedDigit().foregroundStyle(.secondary)
+                        .frame(width: 52, alignment: .trailing)
+                }
+            } header: {
+                Text("Now Playing")
+            } footer: {
+                Text("How long a paused track stays in the notch before it reverts to the clock or your next event. Set to Never to keep it pinned.")
+            }
+
             Section {
                 Toggle(isOn: $settings.audioReactive) {
                     HStack(spacing: 6) { Text("React to music (DJ mode)"); BetaBadge() }
@@ -268,6 +312,11 @@ struct SettingsView: View {
             get: { Color(nsColor: NSColor(hex: settings.pillEdgeColor2Hex) ?? .systemPurple) },
             set: { settings.pillEdgeColor2Hex = NSColor($0).hexString }
         )
+    }
+
+    private var screenshotFolderName: String {
+        let url = ScreenshotWatcher.saveLocation()
+        return url.lastPathComponent.isEmpty ? url.path : url.lastPathComponent
     }
 
     private func tabToggle(_ tab: DocklyTab) -> Binding<Bool> {

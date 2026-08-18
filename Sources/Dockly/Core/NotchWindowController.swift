@@ -25,6 +25,8 @@ private final class PillView<V: View>: NSHostingView<V> {
     var onSwipeNext:    (() -> Void)?
     var onFileDragHover: (() -> Void)?
     var onVolumeScroll: ((CGFloat) -> Void)?
+    /// Compact pill vs open panel — the open panel's lists own their scrolling.
+    var isPanelExpanded: (() -> Bool)?
 
     private var lastSwipeAt: TimeInterval = 0
     private var scrollVolumeAccum: CGFloat = 0
@@ -57,7 +59,13 @@ private final class PillView<V: View>: NSHostingView<V> {
         let dy = event.scrollingDeltaY
 
         // Vertical scroll → volume (accumulate so ~12pt of scroll = one step).
+        // Only while compact: once the panel is open its Tasks / Notes /
+        // Shortcuts lists own vertical scrolling, so hand the event back.
         if abs(dy) > abs(dx) * 1.2 {
+            guard isPanelExpanded?() != true else {
+                super.scrollWheel(with: event)
+                return
+            }
             scrollVolumeAccum += dy
             let step: CGFloat = 12
             while abs(scrollVolumeAccum) >= step {
@@ -141,6 +149,51 @@ final class NotchWindowController: NSObject, ObservableObject {
     private var lastDragPasteboardChangeCount: Int = NSPasteboard(name: .drag).changeCount
     private var dragSessionActive: Bool = false
     private var cachedNotchScreen: NSScreen?
+    private var cursorOverPill = false
+
+    /// Freeze interactive pops (the screenshot shelf) while the user is
+    /// actually at the pill, and while a drag out of it is in flight.
+    private var dragOutInFlight = false
+    private func updateTransientHold() {
+        ActivityManager.shared.holdTransient = isExpanded || cursorOverPill || dragOutInFlight
+    }
+
+    private var dragOutEndMonitors: [Any] = []
+    private var dragOutBackstop: Timer?
+    private var dragOutObserver: NSObjectProtocol?
+
+    /// Called when the panel starts a drag OUT of the pill (the screenshot
+    /// shelf). Without this the cursor leaving the pill collapses the window and
+    /// takes the drag source with it. Released on the next mouse-up, with a
+    /// backstop in case that mouse-up is delivered somewhere we can't see.
+    func beginDragOut() {
+        guard !dragOutInFlight else { return }
+        dragOutInFlight = true
+        updateTransientHold()
+        collapseTimer?.invalidate(); collapseTimer = nil
+
+        let end: (NSEvent) -> Void = { [weak self] _ in self?.endDragOut() }
+        if let g = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp], handler: end) {
+            dragOutEndMonitors.append(g)
+        }
+        if let l = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseUp],
+                                                    handler: { e in end(e); return e }) {
+            dragOutEndMonitors.append(l)
+        }
+        dragOutBackstop = Timer.scheduledTimer(withTimeInterval: 20, repeats: false) { [weak self] _ in
+            self?.endDragOut()
+        }
+    }
+
+    private func endDragOut() {
+        guard dragOutInFlight else { return }
+        dragOutInFlight = false
+        dragOutEndMonitors.forEach { NSEvent.removeMonitor($0) }
+        dragOutEndMonitors.removeAll()
+        dragOutBackstop?.invalidate(); dragOutBackstop = nil
+        updateTransientHold()
+        scheduleCollapse()
+    }
 
     // Spring physics state
     private var springTimer: Timer?
@@ -160,6 +213,9 @@ final class NotchWindowController: NSObject, ObservableObject {
         startGlobalMouseMonitor()
         startFileDragMonitor()
         startHotkeyMonitor()
+        dragOutObserver = NotificationCenter.default.addObserver(
+            forName: .docklyDragOutBegan, object: nil, queue: .main
+        ) { [weak self] _ in self?.beginDragOut() }
         // React to live appearance + geometry changes from settings.
         settingsSink = AppSettings.shared.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async {
@@ -212,11 +268,39 @@ final class NotchWindowController: NSObject, ObservableObject {
             if peekZone.contains(loc) {
                 self.collapseTimer?.invalidate(); self.collapseTimer = nil
                 self.peek(true)
-            } else if self.isPeeking {
-                self.scheduleCollapse()
+                self.armHoverExpand()
+            } else {
+                self.cancelHoverExpand()
+                self.hoverExpandSuppressed = false
+                if self.isPeeking { self.scheduleCollapse() }
             }
         }
     }
+
+    /// "Open the panel on ▸ Hover" — dwell on the pill for `peekToExpandDwell`
+    /// and it opens on its own. In Click mode this does nothing, which is the
+    /// whole point of the setting. Runs independently of `peek`, since peek is
+    /// music-only but hovering should open the panel whatever is showing.
+    private func armHoverExpand() {
+        guard AppSettings.shared.expandTrigger == .hover,
+              !isExpanded, !hoverExpandSuppressed, peekDwellTimer == nil else { return }
+        peekDwellTimer = Timer.scheduledTimer(withTimeInterval: peekToExpandDwell,
+                                              repeats: false) { [weak self] _ in
+            guard let self else { return }
+            self.peekDwellTimer = nil
+            guard AppSettings.shared.expandTrigger == .hover, !self.isExpanded else { return }
+            self.expand(true)
+        }
+    }
+
+    private func cancelHoverExpand() {
+        peekDwellTimer?.invalidate(); peekDwellTimer = nil
+    }
+
+    /// Set when the panel closes while the cursor is still sitting on the pill,
+    /// so hover mode doesn't immediately yank it back open. Cleared the moment
+    /// the cursor leaves the zone.
+    private var hoverExpandSuppressed = false
 
     // Watches for a file drag in progress anywhere on screen. When the
     // cursor enters the notch zone with files on the drag pasteboard,
@@ -281,7 +365,20 @@ final class NotchWindowController: NSObject, ObservableObject {
         tgtFrame = f; velX = 0; velY = 0; velW = 0; velH = 0
     }
 
-    private func notchedScreen() -> NSScreen? {
+    /// Notch metrics for the screen the pill actually lives on. Views must not
+    /// derive these from `NSScreen.main` — with an external display attached
+    /// that's whichever screen has focus, which is usually NOT the notched one,
+    /// so the wings and dead zone end up sized for the wrong panel.
+    var notchMetrics: (height: CGFloat, width: CGFloat) {
+        guard let s = notchedScreen() else {
+            let settings = AppSettings.shared
+            return (max(16, 32 + CGFloat(settings.notchHeightOffset)),
+                    max(40, 220 + CGFloat(settings.notchWidthOffset)))
+        }
+        return (notchHeight(screen: s), notchWidth(screen: s))
+    }
+
+    func notchedScreen() -> NSScreen? {
         if #available(macOS 12.0, *) {
             if let s = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) {
                 cachedNotchScreen = s
@@ -346,9 +443,13 @@ final class NotchWindowController: NSObject, ObservableObject {
             // Just cancel any pending collapse; peek / expand decisions come
             // from the global mouse monitor and explicit clicks.
             self?.collapseTimer?.invalidate(); self?.collapseTimer = nil
+            self?.cursorOverPill = true
+            self?.updateTransientHold()
         }
         hv.onExit = { [weak self] in
-            self?.peekDwellTimer?.invalidate(); self?.peekDwellTimer = nil
+            self?.cursorOverPill = false
+            self?.updateTransientHold()
+            self?.cancelHoverExpand()
             self?.scheduleCollapse()
         }
         hv.onSwipePrev = { [weak self] in
@@ -374,6 +475,10 @@ final class NotchWindowController: NSObject, ObservableObject {
                 AppSettings.shared.activeTab = .tray
                 self.expand(true)
             }
+        }
+        hv.isPanelExpanded = { [weak self] in self?.isExpanded ?? false }
+        hv.onVolumeScroll = { step in
+            VolumeMonitor.shared.adjust(byPercent: Int(step) * 4)
         }
 
         hv.frame = container.bounds
@@ -421,6 +526,7 @@ final class NotchWindowController: NSObject, ObservableObject {
         case .bluetooth:     return base
         case .focus:         return base
         case .timer:         return base * 0.9
+        case .screenshot:    return base
         case .clock:         return base * 0.72
         }
     }
@@ -505,7 +611,7 @@ final class NotchWindowController: NSObject, ObservableObject {
     // MARK: - Collapse scheduling
 
     private func scheduleCollapse() {
-        guard collapseTimer == nil else { return }
+        guard collapseTimer == nil, !dragOutInFlight else { return }
         collapseTimer = Timer.scheduledTimer(
             withTimeInterval: AppSettings.shared.autoCollapseDelay, repeats: false
         ) { [weak self] _ in
@@ -520,7 +626,10 @@ final class NotchWindowController: NSObject, ObservableObject {
 
     func expand(_ on: Bool) {
         guard isExpanded != on, let screen = notchedScreen() else { return }
+        cancelHoverExpand()
+        if !on { hoverExpandSuppressed = true }
         isExpanded = on
+        updateTransientHold()
         on ? Sounds.expand() : Sounds.collapse()
         if on { isPeeking = false }   // expanding supersedes peek
         tgtFrame = pillFrame(screen: screen, expanded: on, peeking: false)
@@ -924,5 +1033,8 @@ final class NotchWindowController: NSObject, ObservableObject {
         if let m = globalDragMonitor { NSEvent.removeMonitor(m) }
         if let m = hotkeyMonitor { NSEvent.removeMonitor(m) }
         if let m = hotkeyLocalMonitor { NSEvent.removeMonitor(m) }
+        dragOutEndMonitors.forEach { NSEvent.removeMonitor($0) }
+        dragOutBackstop?.invalidate()
+        if let o = dragOutObserver { NotificationCenter.default.removeObserver(o) }
     }
 }
